@@ -4,8 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SMART BUS MANAGER v3.6</title>
-	<link rel="icon" type="image/png" href="https://raw.githubusercontent.com/smartapps-web/eratrans/main/logo2.png">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+	
+	<script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
+
     <style>
         :root {
             --primary: #005a9c; --secondary: #6c757d; --success: #28a745;
@@ -152,7 +155,7 @@
 <div id="login-page">
     <div class="login-card">
         <div class="login-logo" style="background: none; box-shadow: none; width: 100%; height: auto; margin-bottom: -110px;">
-    <img src="https://raw.githubusercontent.com/smartapps-web/eratrans/main/logo.png" 
+    <img src="https://raw.githubusercontent.com/smartbusmanager/eratrans/main/logo.png" 
          alt="Logo Utama Smart Bus Manager" 
          style="width: 380px; height: auto; object-fit: contain;">
 </div>
@@ -185,7 +188,7 @@
     <div id="main-app">
 <header class="header" style="display: flex; justify-content: space-between; align-items: center;">
     <div style="display: flex; align-items: center; gap: 12px;">
-        <img src="https://raw.githubusercontent.com/smartapps-web/eratrans/main/logo2.png" 
+        <img src="https://raw.githubusercontent.com/smartbusmanager/eratrans/main/logo2.png" 
      alt="Logo Header" 
      style="height: 80px; width: auto; filter: brightness(0) invert(1);">
         <div>
@@ -477,6 +480,13 @@
         let myChart = null;
         let currentEditExpenseId = null;
 
+// Konfigurasi Firebase (Gunakan ID bus-managemen-5fca8)
+const firebaseConfig = { 
+    databaseURL: "https://bus-managemen-5fca8-default-rtdb.asia-southeast1.firebasedatabase.app/" 
+};
+if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
         const FIREBASE_URL = "https://bus-managemen-5fca8-default-rtdb.asia-southeast1.firebasedatabase.app/eratrans.json";
 		
         // --- LOGIN LOGIC ---
@@ -597,46 +607,75 @@ function saveAccountSettings() {
 
         // --- DATA SYNC ---
 async function saveToCloud() {
-    if (FIREBASE_URL.includes("ISI_URL")) return;
-    try { 
-        // Pastikan 'passwords' ada di dalam body JSON
-        await fetch(FIREBASE_URL, { 
-            method: 'PUT', 
-            body: JSON.stringify({ buses, schedules, expenses, passwords }) 
-        }); 
-    } catch (err) { console.error("Gagal sinkron ke Cloud", err); }
-}
+            // Proteksi data kosong (jangan hapus database kalau data di HP masih kosong)
+            if (buses.length === 0 && schedules.length === 0) return;
 
-        function save() {
+            try {
+                // Langsung simpan ke folder 'eratrans'
+                await db.ref("eratrans").set({
+                    buses,
+                    schedules,
+                    expenses,
+                    passwords
+                });
+                console.log("Sinkron Cloud Berhasil!");
+            } catch (err) {
+                console.error("Gagal Sinkron:", err);
+            }
+        }
+
+function save() {
+            // 1. Simpan ke HP/Laptop dulu (LocalStorage)
             localStorage.setItem(KEYS.BUS, JSON.stringify(buses));
             localStorage.setItem(KEYS.SCHED, JSON.stringify(schedules));
             localStorage.setItem(KEYS.EXP, JSON.stringify(expenses));
             localStorage.setItem(KEYS.PASS, JSON.stringify(passwords));
+            
+            // 2. Langsung dorong ke Cloud (Realtime)
             saveToCloud();
+            
+            // 3. Update tampilan saat itu juga
+            renderAll();
         }
 
-        async function loadData() {
+// --- 1. GANTI FUNGSI LOADDATA LAMA DENGAN INI ---
+        function loadData() {
+            // Ambil data lokal dulu buat cadangan instan (Biar gak kedip/blank)
             buses = JSON.parse(localStorage.getItem(KEYS.BUS)) || [];
             schedules = JSON.parse(localStorage.getItem(KEYS.SCHED)) || [];
             expenses = JSON.parse(localStorage.getItem(KEYS.EXP)) || [];
             passwords = JSON.parse(localStorage.getItem(KEYS.PASS)) || passwords;
             renderAll();
-            try {
-                const response = await fetch(FIREBASE_URL);
-                const cloud = await response.json();
+
+            // AKTIFKAN REALTIME LISTENER (Sama seperti KangKredit)
+            // Firebase akan terus memantau folder 'eratrans'
+            db.ref("eratrans").on("value", (snapshot) => {
+                const cloud = snapshot.val();
                 if (cloud) {
-                    buses = cloud.buses || []; schedules = cloud.schedules || [];
-                    expenses = cloud.expenses || []; passwords = cloud.passwords || passwords;
-                    save(); renderAll();
+                    buses = cloud.buses || [];
+                    schedules = cloud.schedules || [];
+                    expenses = cloud.expenses || [];
+                    passwords = cloud.passwords || passwords;
+
+                    // Simpan ke LocalStorage agar sinkron
+                    localStorage.setItem(KEYS.BUS, JSON.stringify(buses));
+                    localStorage.setItem(KEYS.SCHED, JSON.stringify(schedules));
+                    localStorage.setItem(KEYS.EXP, JSON.stringify(expenses));
+                    localStorage.setItem(KEYS.PASS, JSON.stringify(passwords));
+
+                    // LANGSUNG UPDATE TAMPILAN OTOMATIS
+                    renderAll(); 
+                    console.log("Data SBM Sinkron Realtime! 🚀");
                 }
-            } catch (err) { }
+            });
         }
 
         window.onload = () => {
             const session = sessionStorage.getItem(KEYS.USER);
             if (session) { currentUser = session; showMainApp(); }
         };
-
+		
+		
         // --- CORE UI LOGIC (Index1) ---
         function formatRp(n) { return "Rp " + (parseInt(n)||0).toLocaleString('id-ID'); }
         function renderAll() { renderCalendar(); renderStats(); renderSidebar(); checkLegalAlerts(); }
@@ -1576,7 +1615,7 @@ function processExport() {
     const jam = String(sekarang.getHours()).padStart(2, '0') + "-" + 
                 String(sekarang.getMinutes()).padStart(2, '0');
     
-    const namaFile = `Backup_Eratrans_${tgl}_${jam}.json`;
+    const namaFile = `Backup_SBM_${tgl}_${jam}.json`;
 
     // 2. Proses Download
     const data = JSON.stringify({buses, schedules, expenses, passwords});
@@ -1606,7 +1645,3 @@ function formatDateDisplay(dateStr) {
     </script>
 </body>
 </html>
-
-
-
-

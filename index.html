@@ -605,24 +605,23 @@ function saveAccountSettings() {
     }
 }
 
-        // --- DATA SYNC ---
 async function saveToCloud() {
-            // Proteksi data kosong (jangan hapus database kalau data di HP masih kosong)
-            if (buses.length === 0 && schedules.length === 0) return;
+    // PROTEKSI: Jangan kirim kalau data kosong
+    if (buses.length === 0 && schedules.length === 0) return;
 
-            try {
-                // Langsung simpan ke folder 'eratrans'
-                await db.ref("eratrans").set({
-                    buses,
-                    schedules,
-                    expenses,
-                    passwords
-                });
-                console.log("Sinkron Cloud Berhasil!");
-            } catch (err) {
-                console.error("Gagal Sinkron:", err);
-            }
-        }
+    try {
+        // Kirim ke folder eratrans
+        await db.ref("eratrans").set({
+            buses,
+            schedules,
+            expenses,
+            passwords
+        });
+        console.log("✅ Data ERA Trans Sinkron!");
+    } catch (err) {
+        console.error("❌ Gagal Sinkron:", err);
+    }
+}
 
 function save() {
             // 1. Simpan ke HP/Laptop dulu (LocalStorage)
@@ -1615,7 +1614,7 @@ function processExport() {
     const jam = String(sekarang.getHours()).padStart(2, '0') + "-" + 
                 String(sekarang.getMinutes()).padStart(2, '0');
     
-    const namaFile = `Backup_SBM_${tgl}_${jam}.json`;
+    const namaFile = `eratrans_backup_${tgl}_${jam}.json`;
 
     // 2. Proses Download
     const data = JSON.stringify({buses, schedules, expenses, passwords});
